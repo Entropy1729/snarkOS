@@ -27,7 +27,6 @@ use once_cell::race::OnceBox;
 use parking_lot::RwLock;
 use std::{net::SocketAddr, sync::Arc};
 use tokio::task;
-
 pub(crate) type InternalLedger<N> = snarkvm::prelude::Ledger<N, BlockDB<N>, ProgramDB<N>>;
 // pub(crate) type InternalLedger<N> = snarkvm::prelude::Ledger<N, BlockMemory<N>, ProgramMemory<N>>;
 
@@ -179,27 +178,42 @@ impl<N: Network> Ledger<N> {
     }
 
     /// Creates a transfer transaction.
-    pub fn create_transfer(&self, to: &Address<N>, amount: u64) -> Result<Transaction<N>> {
-        // Fetch the unspent records.
-        let records = self.find_unspent_records()?;
-        ensure!(!records.len().is_zero(), "The Aleo account has no records to spend.");
+    pub fn create_transfer(
+        &self,
+        to_address: Address<N>,
+        vk: Option<ViewKey<N>>,
+        pk: Option<PrivateKey<N>>,
+        amount: u64,
+    ) -> Result<Transaction<N>> {
+        let vk = vk.unwrap_or(self.view_key);
+        let pk = pk.unwrap_or(self.private_key);
+        // Fetch the unspent record with the least gates.
+        let record = self
+            .ledger
+            .read()
+            .find_records(&vk, RecordsFilter::Unspent)?
+            .filter(|(_, record)| !record.gates().is_zero())
+            .min_by(|(_, a), (_, b)| (**a.gates()).cmp(&**b.gates()));
 
-        // Initialize an RNG.
-        let rng = &mut ::rand::thread_rng();
+        // Prepare the record.
+        let record = match record {
+            Some((_, record)) => record,
+            None => bail!("The Aleo account has no records to spend."),
+        };
 
         // Create a new transaction.
         Transaction::execute(
             self.ledger.read().vm(),
-            &self.private_key,
+            &pk,
             &ProgramID::from_str("credits.aleo")?,
             Identifier::from_str("transfer")?,
             &[
-                Value::Record(records.values().next().unwrap().clone()),
-                Value::from_str(&format!("{to}"))?,
+                Value::Record(record),
+                Value::from_str(&format!("{to_address}"))?,
                 Value::from_str(&format!("{amount}u64"))?,
             ],
             None,
-            rng,
+            &mut ::rand::thread_rng(),
         )
     }
 }
