@@ -53,7 +53,7 @@ pub struct CLI {
 
     /// Specify the rest API port for the node server.
     #[clap(long = "rest_port")]
-    pub rest_port: Option<String>,
+    pub rest_port: Option<u16>,
 
     /// Specify the IP address and port for the RPC server.
     #[clap(default_value = "0.0.0.0:3033", long = "rpc")]
