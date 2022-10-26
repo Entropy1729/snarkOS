@@ -232,13 +232,12 @@ pub fn handle_listener<N: Network>(listener: TcpListener, ledger: Arc<Ledger<N>>
 
     tokio::spawn(async move {
         loop {
-            let ledger_clone = ledger.clone();
-
             match listener.accept().await {
                 // Process the inbound connection request.
                 Ok((stream, peer_ip)) => {
+                    let ledger_clone = ledger.clone();
                     tokio::spawn(async move {
-                        if let Err(err) = handle_peer::<N>(stream, peer_ip, ledger_clone.clone()).await {
+                        if let Err(err) = handle_peer::<N>(stream, peer_ip, ledger_clone).await {
                             warn!("Error handling peer {}: {:?}", peer_ip, err);
                         }
                     });
